@@ -60,21 +60,42 @@ end
     Given X which same sampled at nodes old_nodes, return the linear interpolation evaluated at new_nodes.
     If periodicise if true, X[1] is appended to X and one node is appended to old_nodes, assuming a constent step
 """
-function resample(X::Array{Real}, old_nodes::Vector{Real}, new_nodes::Vector{Float64}; periodicise::Bool=false)
-    d = ndims(X)
+function resample(X::Array{T}, old_nodes::AbstractVector{T}, new_nodes::AbstractVector{T}; periodicise::Bool=false, append::Union{Nothing,Array{T}}=nothing) where T <: Real
+    @assert !periodicise || isnothing(append)
+
     new_N = length(new_nodes)
+    nd = ndims(X)
 
     (X_ext, old_nodes_ext) = if periodicise
-        (vcat(X, X[1,:]'), vcat(old_nodes; 2old_nodes[end] - old_nodes[end-1]))
+        if nd == 1
+            (vcat(X, X[1]), vcat(old_nodes, 2old_nodes[end] - old_nodes[end-1]))
+        else
+            (vcat(X, X[1,:]'), vcat(old_nodes, 2old_nodes[end] - old_nodes[end-1]))
+        end
+    elseif !isnothing(append)
+        if nd == 1
+            (vcat(X, append), vcat(old_nodes, 2old_nodes[end] - old_nodes[end-1]))
+        else
+            (vcat(X, vec(append)'), vcat(old_nodes, 2old_nodes[end] - old_nodes[end-1]))
+        end
     else
         (X, old_nodes)
     end
 
-    dst = zeros(new_N, d)
+    if nd == 1
+        dst = vec(interpolate((old_nodes_ext,), X_ext, Gridded(Linear()))(new_nodes))
+    elseif nd == 2
+        d = size(X, 2)
+        dst = zeros(new_N, d)
 
-    for i in 1:d
-        dst[:,i] = interpolate((old_nodes_ext,), X_ext[:,i], Gridded(Linear()))(new_nodes)
+        for i in 1:d
+            dst[:,i] = interpolate((old_nodes_ext,), X_ext[:,i], Gridded(Linear()))(new_nodes)
+        end
+    else
+        throw(ArgumentError("X must have at most 2 dimensions"))
     end
+
+    return dst
 end
 
 """
@@ -82,8 +103,9 @@ end
     the range with the same bounds with length new_N.
     If periodicise if true, X[1] is appended to X and one node is appended to old_range, assuming a constent step
 """
-function resample(X::Array{Real}, old_range::Union{Vector{Real}, StepRangeLen}, new_N::Int64; periodicise::Bool=false)
-    new_range = if periodicise
+function resample(X::Array{T}, old_range::AbstractVector{T}, new_N::Int64; periodicise::Bool=false, append::Union{Nothing,Array{T}}=nothing) where T <: Real
+    @assert !periodicise || isnothing(append)
+    new_range = if periodicise || !isnothing(append)
         s = if isa(old_range, StepRangeLen)
             step(old_range)
         else
@@ -94,7 +116,7 @@ function resample(X::Array{Real}, old_range::Union{Vector{Real}, StepRangeLen}, 
         range(old_range[1], old_range[end]; length=new_N)
     end
 
-    return resample(X, old_range, new_range, periodicise=periodicise)
+    return resample(X, old_range, new_range; periodicise=periodicise, append=append)
 end
 
 end # module
