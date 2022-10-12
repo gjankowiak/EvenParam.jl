@@ -56,4 +56,45 @@ function reparam!(X::Array{Float64,2}; closed::Bool=true)
     reparam(X, X; closed=closed)
 end
 
+"""
+    Given X which same sampled at nodes old_nodes, return the linear interpolation evaluated at new_nodes.
+    If periodicise if true, X[1] is appended to X and one node is appended to old_nodes, assuming a constent step
+"""
+function resample(X::Array{Real}, old_nodes::Vector{Real}, new_nodes::Vector{Float64}; periodicise::Bool=false)
+    d = ndims(X)
+    new_N = length(new_nodes)
+
+    (X_ext, old_nodes_ext) = if periodicise
+        (vcat(X, X[1,:]'), vcat(old_nodes; 2old_nodes[end] - old_nodes[end-1]))
+    else
+        (X, old_nodes)
+    end
+
+    dst = zeros(new_N, d)
+
+    for i in 1:d
+        dst[:,i] = interpolate((old_nodes_ext,), X_ext[:,i], Gridded(Linear()))(new_nodes)
+    end
+end
+
+"""
+    Given X which same sampled at the nodes corresponding to old_range, return the linear interpolation evaluated
+    the range with the same bounds with length new_N.
+    If periodicise if true, X[1] is appended to X and one node is appended to old_range, assuming a constent step
+"""
+function resample(X::Array{Real}, old_range::Union{Vector{Real}, StepRangeLen}, new_N::Int64; periodicise::Bool=false)
+    new_range = if periodicise
+        s = if isa(old_range, StepRangeLen)
+            step(old_range)
+        else
+            old_range[2] - old_range[1]
+        end
+        range(old_range[1], old_range[end]+s; length=new_N+1)[1:new_N]
+    else
+        range(old_range[1], old_range[end]; length=new_N)
+    end
+
+    return resample(X, old_range, new_range, periodicise=periodicise)
+end
+
 end # module
